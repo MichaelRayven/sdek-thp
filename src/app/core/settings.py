@@ -12,5 +12,8 @@ class Settings(BaseSettings):
     llm_api_key: str = "ollama"
     llm_model: str = "llama3.1"
 
+    llm_temperature: float = 0.0
+    llm_timeout_seconds: int = 60
+
 
 settings = Settings()
