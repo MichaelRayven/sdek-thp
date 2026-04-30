@@ -4,6 +4,7 @@ from app.services.query_analyzer import QueryAnalyzerService
 from pydantic import BaseModel
 
 from langgraph.graph import START, END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 
 class ChatWorkflowState(BaseModel):
@@ -12,7 +13,7 @@ class ChatWorkflowState(BaseModel):
 
     context: str
     message: str
-    tread_id: str
+    thread_id: str
 
     answer: str
 
@@ -24,12 +25,12 @@ class ChatWorkflow:
         retriever: RetrieverService,
         llm: LLMService,
     ):
-        self._graph = self._build_graph()
+        self.chain = self._build_graph()
         self.query_analyzer = query_analyzer
         self.retriever = retriever
         self.llm = llm
 
-    def _build_graph(self):
+    def _build_graph(self) -> CompiledStateGraph:
         workflow = StateGraph(ChatWorkflowState)
 
         workflow.add_node("analyze_query", self._analyze_query)
@@ -51,6 +52,8 @@ class ChatWorkflow:
         workflow.add_edge("clarify", END)
         workflow.add_edge("retrieve_context", "generate_answer")
         workflow.add_edge("generate_answer", END)
+
+        return workflow.compile()
 
     def _analyze_query(self, state: ChatWorkflowState) -> dict:
         analysis = self.query_analyzer.analyze(state.message)
@@ -100,3 +103,24 @@ class ChatWorkflow:
         ]
 
         return {"answer": await self.llm.generate(messages)}
+
+    async def ainvoke(
+        self,
+        message: str,
+        thread_id: str,
+    ) -> ChatWorkflowState:
+        initial_state = ChatWorkflowState(
+            country=None,
+            needs_clarification=False,
+            message=message,
+            thread_id=thread_id,
+            context="",
+            answer="",
+        )
+
+        result = await self.chain.ainvoke(initial_state)
+
+        if isinstance(result, ChatWorkflowState):
+            return result
+
+        return ChatWorkflowState.model_validate(result)
