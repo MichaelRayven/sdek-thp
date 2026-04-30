@@ -15,5 +15,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_timeout_seconds: int = 60
 
+    data_dir: str = "data"
+
 
 settings = Settings()
