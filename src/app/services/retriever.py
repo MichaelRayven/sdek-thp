@@ -3,8 +3,8 @@ from app.models.document import Document
 
 
 class RetrieverService:
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
+    def __init__(self, data_dir: str) -> None:
+        self.data_dir = Path(data_dir)
         self.documents = self._load_documents()
 
     def _load_documents(self) -> list[Document]:
