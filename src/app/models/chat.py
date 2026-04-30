@@ -8,5 +8,3 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    sources: list[str] = []
-    needs_clarification: bool = False

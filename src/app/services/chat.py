@@ -1,12 +1,17 @@
+from app.workflows.chat_workflow import ChatWorkflow
 from app.models.chat import ChatRequest, ChatResponse
 
 
 class ChatService:
+    def __init__(self, workflow: ChatWorkflow):
+        self.workflow = workflow
+
     async def reply(self, request: ChatRequest) -> ChatResponse:
         message = request.message.strip()
 
-        return ChatResponse(
-            answer=("TODO: Connect LLM, get context from session, message:" + message),
-            sources=[],
-            needs_clarification=False,
+        result = await self.workflow.ainvoke(
+            message=message,
+            thread_id=request.thread_id,
         )
+
+        return ChatResponse(answer=result.answer)
