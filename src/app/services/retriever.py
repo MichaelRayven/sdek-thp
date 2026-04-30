@@ -29,3 +29,15 @@ class RetrieverService:
             )
 
         return documents
+
+    def retrieve(self, country: str | None) -> list[Document]:
+        docs: list[Document] = []
+
+        for doc in self.documents:
+            if doc.country is None:
+                docs.append(doc)
+
+        if country is not None:
+            docs.extend(doc for doc in self.documents if doc.country == country)
+
+        return docs

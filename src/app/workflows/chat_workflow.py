@@ -1,3 +1,4 @@
+from app.services.retriever import RetrieverService
 from app.services.query_analyzer import QueryAnalyzerService
 from pydantic import BaseModel
 
@@ -16,9 +17,12 @@ class ChatWorkflowState(BaseModel):
 
 
 class ChatWorkflow:
-    def __init__(self, query_analyzer: QueryAnalyzerService):
+    def __init__(
+        self, query_analyzer: QueryAnalyzerService, retriever: RetrieverService
+    ):
         self._graph = self._build_graph()
         self.query_analyzer = query_analyzer
+        self.retriever = retriever
 
     def _build_graph(self):
         workflow = StateGraph(ChatWorkflowState)
@@ -57,14 +61,20 @@ class ChatWorkflow:
 
         return "retrieve"
 
-    def _clarify(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        return state
+    def _clarify(self, state: ChatWorkflowState) -> dict:
+        return {}
 
-    def _retrieve_context(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        return state
+    def _retrieve_context(self, state: ChatWorkflowState) -> dict:
+        documents = self.retriever.retrieve(country=state.country)
+
+        context = "\n\n".join(
+            f"Source: {doc.source}\n{doc.content}" for doc in documents
+        )
+
+        return {"context": context}
 
     async def _generate_answer(
         self,
         state: ChatWorkflowState,
-    ) -> ChatWorkflowState:
-        return state
+    ) -> dict:
+        return {}
