@@ -1,3 +1,4 @@
+from app.services.llm import LLMService
 from app.services.retriever import RetrieverService
 from app.services.query_analyzer import QueryAnalyzerService
 from pydantic import BaseModel
@@ -18,11 +19,15 @@ class ChatWorkflowState(BaseModel):
 
 class ChatWorkflow:
     def __init__(
-        self, query_analyzer: QueryAnalyzerService, retriever: RetrieverService
+        self,
+        query_analyzer: QueryAnalyzerService,
+        retriever: RetrieverService,
+        llm: LLMService,
     ):
         self._graph = self._build_graph()
         self.query_analyzer = query_analyzer
         self.retriever = retriever
+        self.llm = llm
 
     def _build_graph(self):
         workflow = StateGraph(ChatWorkflowState)
@@ -62,7 +67,7 @@ class ChatWorkflow:
         return "retrieve"
 
     def _clarify(self, state: ChatWorkflowState) -> dict:
-        return {}
+        return {"answer": "Пожалуйста, уточните страну: Франция или Германия"}
 
     def _retrieve_context(self, state: ChatWorkflowState) -> dict:
         documents = self.retriever.retrieve(country=state.country)
@@ -77,4 +82,21 @@ class ChatWorkflow:
         self,
         state: ChatWorkflowState,
     ) -> dict:
-        return {}
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Ты RAG ассистент, который консультирует пользователей по правилам международной стажировки. "
+                    "Формируй ответы основываясь на предоставленном контексте. "
+                    "Если контекст не содержит ответа на заданный вопрос, отвечай "
+                    "что база знаний не содержит такой информации. "
+                    "Не искажай факты."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (f"Контекст:\n{state.context}\n\Вопрос:\n{state.message}"),
+            },
+        ]
+
+        return {"answer": await self.llm.generate(messages)}
