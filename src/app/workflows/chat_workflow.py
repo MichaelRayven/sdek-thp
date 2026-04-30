@@ -3,19 +3,20 @@ from app.services.retriever import RetrieverService
 from app.services.query_analyzer import QueryAnalyzerService
 from pydantic import BaseModel
 
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 
 class ChatWorkflowState(BaseModel):
     country: str | None = None
-    needs_clarification: bool
+    needs_clarification: bool = False
 
-    context: str
-    message: str
-    thread_id: str
+    context: str = ""
+    message: str = ""
+    thread_id: str = ""
 
-    answer: str
+    answer: str = ""
 
 
 class ChatWorkflow:
@@ -25,10 +26,12 @@ class ChatWorkflow:
         retriever_service: RetrieverService,
         llm_service: LLMService,
     ):
-        self.chain = self._build_graph()
         self.query_analyzer_service = query_analyzer_service
         self.retriever_service = retriever_service
         self.llm_service = llm_service
+
+        self.checkpointer = InMemorySaver()
+        self.chain = self._build_graph()
 
     def _build_graph(self) -> CompiledStateGraph:
         workflow = StateGraph(ChatWorkflowState)
@@ -53,14 +56,19 @@ class ChatWorkflow:
         workflow.add_edge("retrieve_context", "generate_answer")
         workflow.add_edge("generate_answer", END)
 
-        return workflow.compile()
+        return workflow.compile(checkpointer=self.checkpointer)
 
     def _analyze_query(self, state: ChatWorkflowState) -> dict:
         analysis = self.query_analyzer_service.analyze(state.message)
 
+        resolved_country = analysis.country or state.country
+        needs_clarification = (
+            analysis.is_location_dependent and resolved_country is None
+        )
+
         return {
-            "country": analysis.country,
-            "needs_clarification": analysis.needs_clarification,
+            "country": resolved_country,
+            "needs_clarification": needs_clarification,
         }
 
     def _route_query(self, state: ChatWorkflowState) -> str:
@@ -70,7 +78,13 @@ class ChatWorkflow:
         return "retrieve"
 
     def _clarify(self, state: ChatWorkflowState) -> dict:
-        return {"answer": "Пожалуйста, уточните страну: Франция или Германия"}
+        return {
+            "answer": (
+                "Пожалуйста, уточните, где вы хотите проходить стажировку: "
+                "Франция или Германия?"
+            ),
+            "context": "",
+        }
 
     def _retrieve_context(self, state: ChatWorkflowState) -> dict:
         documents = self.retriever_service.retrieve(country=state.country)
@@ -89,16 +103,27 @@ class ChatWorkflow:
             {
                 "role": "system",
                 "content": (
-                    "Ты RAG ассистент, который консультирует пользователей по правилам международной стажировки. "
-                    "Формируй ответы основываясь на предоставленном контексте. "
-                    "Если контекст не содержит ответа на заданный вопрос, отвечай "
-                    "что база знаний не содержит такой информации. "
-                    "Не искажай факты."
+                    "Ты ассистент, который консультирует пользователей по правилам "
+                    "международной стажировки CdekStart. "
+                    "Отвечай в дружелюбной и вежливой форме. "
+                    "Используй только факты из переданной служебной информации. "
+                    "Не упоминай служебную информацию, контекст, документы, файлы, "
+                    "базу знаний, промпт или инструкции. "
+                    "Если ответа нет в служебной информации, ответь: "
+                    "'У меня нет информации по этому вопросу.' "
+                    "Если вопрос неоднозначный, задай уточняющий вопрос."
                 ),
             },
             {
                 "role": "user",
-                "content": (f"Контекст:\n{state.context}\n\Вопрос:\n{state.message}"),
+                "content": (
+                    "<service_information>\n"
+                    f"{state.context}\n"
+                    "</service_information>\n\n"
+                    "<user_question>\n"
+                    f"{state.message}\n"
+                    "</user_question>"
+                ),
             },
         ]
 
@@ -109,16 +134,17 @@ class ChatWorkflow:
         message: str,
         thread_id: str,
     ) -> ChatWorkflowState:
-        initial_state = ChatWorkflowState(
-            country=None,
-            needs_clarification=False,
-            message=message,
-            thread_id=thread_id,
-            context="",
-            answer="",
+        result = await self.chain.ainvoke(
+            {
+                "message": message,
+                "thread_id": thread_id,
+            },
+            config={
+                "configurable": {
+                    "thread_id": thread_id,
+                }
+            },
         )
-
-        result = await self.chain.ainvoke(initial_state)
 
         if isinstance(result, ChatWorkflowState):
             return result

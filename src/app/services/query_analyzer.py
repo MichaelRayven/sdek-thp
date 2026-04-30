@@ -41,13 +41,9 @@ class QueryAnalyzerService:
     def analyze(self, text: str) -> QueryAnalysis:
         normalized = text.lower()
 
-        country = self._detect_country(normalized)
-        is_location_dependent = self._is_location_dependent(normalized)
-        needs_clarification = is_location_dependent and country is None
-
         return QueryAnalysis(
-            country=country,
-            needs_clarification=needs_clarification,
+            country=self._detect_country(normalized),
+            is_location_dependent=self._is_location_dependent(normalized),
         )
 
     def _detect_country(self, text: str) -> str | None:
