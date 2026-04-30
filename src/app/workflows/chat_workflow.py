@@ -21,14 +21,14 @@ class ChatWorkflowState(BaseModel):
 class ChatWorkflow:
     def __init__(
         self,
-        query_analyzer: QueryAnalyzerService,
-        retriever: RetrieverService,
-        llm: LLMService,
+        query_analyzer_service: QueryAnalyzerService,
+        retriever_service: RetrieverService,
+        llm_service: LLMService,
     ):
         self.chain = self._build_graph()
-        self.query_analyzer = query_analyzer
-        self.retriever = retriever
-        self.llm = llm
+        self.query_analyzer_service = query_analyzer_service
+        self.retriever_service = retriever_service
+        self.llm_service = llm_service
 
     def _build_graph(self) -> CompiledStateGraph:
         workflow = StateGraph(ChatWorkflowState)
@@ -56,7 +56,7 @@ class ChatWorkflow:
         return workflow.compile()
 
     def _analyze_query(self, state: ChatWorkflowState) -> dict:
-        analysis = self.query_analyzer.analyze(state.message)
+        analysis = self.query_analyzer_service.analyze(state.message)
 
         return {
             "country": analysis.country,
@@ -73,7 +73,7 @@ class ChatWorkflow:
         return {"answer": "Пожалуйста, уточните страну: Франция или Германия"}
 
     def _retrieve_context(self, state: ChatWorkflowState) -> dict:
-        documents = self.retriever.retrieve(country=state.country)
+        documents = self.retriever_service.retrieve(country=state.country)
 
         context = "\n\n".join(
             f"Source: {doc.source}\n{doc.content}" for doc in documents
@@ -102,7 +102,7 @@ class ChatWorkflow:
             },
         ]
 
-        return {"answer": await self.llm.generate(messages)}
+        return {"answer": await self.llm_service.generate(messages)}
 
     async def ainvoke(
         self,
