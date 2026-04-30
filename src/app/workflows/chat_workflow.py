@@ -1,12 +1,12 @@
-from typing_extensions import TypedDict
+from app.services.query_analyzer import QueryAnalyzerService
+from pydantic import BaseModel
 
 from langgraph.graph import START, END, StateGraph
 
 
-class ChatWorkflowState(TypedDict):
-    country: str | None
+class ChatWorkflowState(BaseModel):
+    country: str | None = None
     needs_clarification: bool
-    location_dependent: bool
 
     context: str
     message: str
@@ -16,8 +16,9 @@ class ChatWorkflowState(TypedDict):
 
 
 class ChatWorkflow:
-    def __init__(self):
+    def __init__(self, query_analyzer: QueryAnalyzerService):
         self._graph = self._build_graph()
+        self.query_analyzer = query_analyzer
 
     def _build_graph(self):
         workflow = StateGraph(ChatWorkflowState)
@@ -42,11 +43,19 @@ class ChatWorkflow:
         workflow.add_edge("retrieve_context", "generate_answer")
         workflow.add_edge("generate_answer", END)
 
-    def _analyze_query(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        return state
+    def _analyze_query(self, state: ChatWorkflowState) -> dict:
+        analysis = self.query_analyzer.analyze(state.message)
+
+        return {
+            "country": analysis.country,
+            "needs_clarification": analysis.needs_clarification,
+        }
 
     def _route_query(self, state: ChatWorkflowState) -> str:
-        return "clarify"
+        if state.needs_clarification:
+            return "clarify"
+
+        return "retrieve"
 
     def _clarify(self, state: ChatWorkflowState) -> ChatWorkflowState:
         return state
